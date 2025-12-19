@@ -13,18 +13,20 @@ import {
     Trash2,
     ArrowLeft,
     Share2,
-    Bookmark,
     Printer,
     Flag,
     AlertCircle,
     Star,
     Thermometer,
     Zap,
-    Heart
+    Heart,
+    Calendar,
+    Tag,
+    Bookmark
 } from 'lucide-react';
 
 interface Recipe {
-    id: number;
+    id: string;
     title: string;
     description: string;
     ingredients: string;
@@ -34,56 +36,80 @@ interface Recipe {
     servings: number;
     difficulty: string;
     category: string;
-    image_url: string | null;
+    image_url: string;
     author_name: string;
+    author_avatar: string;
     created_at: string;
-    user_id: number;
+    updated_at: string;
+    user_id: string;
 }
 
 export default function RecipeDetailPage() {
-    const params = useParams();
     const router = useRouter();
+    const params = useParams<{ id: string }>();
     const [recipe, setRecipe] = useState<Recipe | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [user, setUser] = useState<any>(null);
     const [isFavorite, setIsFavorite] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [activeTab, setActiveTab] = useState<'ingredients' | 'instructions'>('ingredients');
 
     useEffect(() => {
-        fetchRecipe();
         const userData = localStorage.getItem('user');
         if (userData) {
             setUser(JSON.parse(userData));
         }
-    }, [params.id]);
+    }, []);
 
-    const fetchRecipe = async () => {
+    useEffect(() => {
+        const fetchRecipeData = async () => {
+            if (params?.id) {
+                await fetchRecipe(params.id);
+            }
+        };
+        fetchRecipeData();
+    }, [params?.id]);
+
+    const fetchRecipe = async (recipeId: string) => {
         try {
             setLoading(true);
-            const response = await fetch(`/api/recipes/${params.id}`);
+            setError('');
+            
+            console.log('Fetching recipe with ID:', recipeId);
+            
+            const response = await fetch(`/api/recipes/${recipeId}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const data = await response.json();
+            console.log('API Response:', data);
 
-            if (data.success && data.recipe) {
+            if (data.recipe) {
                 setRecipe(data.recipe);
             } else {
                 setError(data.error || 'Failed to load recipe');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error fetching recipe:', error);
-            setError('Failed to load recipe. Please try again.');
+            setError(error.message || 'Failed to load recipe. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
     const handleDelete = async () => {
+        if (!params?.id || !recipe) return;
+        
         try {
             const token = localStorage.getItem('token');
             const response = await fetch(`/api/recipes/${params.id}`, {
                 method: 'DELETE',
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
                 }
             });
 
@@ -103,9 +129,13 @@ export default function RecipeDetailPage() {
         }
     };
 
-    const handleShare = () => {
-        navigator.clipboard.writeText(window.location.href);
-        alert('Recipe link copied to clipboard!');
+    const handleShare = async () => {
+        try {
+            await navigator.clipboard.writeText(window.location.href);
+            alert('Recipe link copied to clipboard!');
+        } catch (error) {
+            alert('Failed to copy link');
+        }
     };
 
     const handlePrint = () => {
@@ -114,6 +144,33 @@ export default function RecipeDetailPage() {
 
     const handleReport = () => {
         alert('Report feature coming soon!');
+    };
+
+    const handleFavorite = async () => {
+        if (!user) {
+            alert('Please login to add to favorites');
+            router.push('/login');
+            return;
+        }
+        
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/favorites', {
+                method: isFavorite ? 'DELETE' : 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ recipe_id: recipe?.id })
+            });
+            
+            if (response.ok) {
+                setIsFavorite(!isFavorite);
+                alert(isFavorite ? 'Removed from favorites' : 'Added to favorites');
+            }
+        } catch (error) {
+            console.error('Error updating favorite:', error);
+        }
     };
 
     const getDifficultyIcon = (difficulty: string) => {
@@ -141,8 +198,33 @@ export default function RecipeDetailPage() {
             'Asian': 'bg-blue-50 text-blue-700 border-blue-100',
             'Dessert': 'bg-purple-50 text-purple-700 border-purple-100',
             'Indian': 'bg-orange-50 text-orange-700 border-orange-100',
+            'Vegetarian': 'bg-emerald-50 text-emerald-700 border-emerald-100',
+            'Vegan': 'bg-teal-50 text-teal-700 border-teal-100',
+            'Breakfast': 'bg-amber-50 text-amber-700 border-amber-100',
+            'Lunch': 'bg-cyan-50 text-cyan-700 border-cyan-100',
+            'Dinner': 'bg-indigo-50 text-indigo-700 border-indigo-100',
         };
         return colors[category] || 'bg-gray-50 text-gray-700 border-gray-100';
+    };
+
+    const formatDate = (dateString: string) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    };
+
+    const calculateNutrition = () => {
+        const ingredients = recipe?.ingredients || '';
+        const lines = ingredients.split('\n').filter(line => line.trim());
+        return {
+            calories: Math.round(lines.length * 150),
+            protein: Math.round(lines.length * 10),
+            carbs: Math.round(lines.length * 20),
+            fat: Math.round(lines.length * 8)
+        };
     };
 
     if (loading) {
@@ -151,13 +233,35 @@ export default function RecipeDetailPage() {
                 <Navbar />
                 <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
                     <div className="container mx-auto px-4 py-12">
+                        <button
+                            onClick={() => router.back()}
+                            className="flex items-center text-gray-600 hover:text-orange-500 mb-8 group animate-pulse"
+                        >
+                            <div className="h-5 w-20 bg-gray-200 rounded"></div>
+                        </button>
+
                         <div className="animate-pulse">
-                            <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"></div>
-                            <div className="h-96 bg-gray-200 rounded-xl mb-8"></div>
-                            <div className="space-y-4">
-                                <div className="h-6 bg-gray-200 rounded w-3/4"></div>
-                                <div className="h-6 bg-gray-200 rounded w-1/2"></div>
-                                <div className="h-6 bg-gray-200 rounded w-2/3"></div>
+                            <div className="h-12 bg-gray-200 rounded-xl w-3/4 mb-4"></div>
+                            <div className="flex gap-2 mb-6">
+                                <div className="h-8 w-24 bg-gray-200 rounded-full"></div>
+                                <div className="h-8 w-32 bg-gray-200 rounded-full"></div>
+                            </div>
+                            
+                            <div className="h-96 bg-gray-200 rounded-2xl mb-8"></div>
+                            
+                            <div className="grid lg:grid-cols-3 gap-8">
+                                <div className="lg:col-span-2 space-y-4">
+                                    <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+                                    <div className="space-y-2">
+                                        {[1,2,3,4,5].map(i => (
+                                            <div key={i} className="h-6 bg-gray-200 rounded"></div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="h-48 bg-gray-200 rounded-xl"></div>
+                                    <div className="h-48 bg-gray-200 rounded-xl"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -213,6 +317,7 @@ export default function RecipeDetailPage() {
 
     const totalTime = recipe.prep_time + recipe.cook_time;
     const isOwner = user && user.id === recipe.user_id;
+    const nutrition = calculateNutrition();
 
     return (
         <>
@@ -220,7 +325,7 @@ export default function RecipeDetailPage() {
 
             {showDeleteModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl p-8 max-w-md w-full">
+                    <div className="bg-white rounded-2xl p-8 max-w-md w-full animate-in fade-in zoom-in-95">
                         <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
                             <AlertCircle className="w-8 h-8 text-red-500" />
                         </div>
@@ -231,13 +336,13 @@ export default function RecipeDetailPage() {
                         <div className="flex gap-4">
                             <button
                                 onClick={() => setShowDeleteModal(false)}
-                                className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50"
+                                className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleDelete}
-                                className="flex-1 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-lg"
+                                className="flex-1 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-lg transition-all"
                             >
                                 Delete Recipe
                             </button>
@@ -247,41 +352,46 @@ export default function RecipeDetailPage() {
             )}
 
             <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-                {/* Hero Section */}
                 <div className="relative overflow-hidden bg-gradient-to-br from-orange-500 via-orange-400 to-red-500">
                     <div className="absolute inset-0 bg-black/10"></div>
-                    <div className="container mx-auto px-4 py-12 relative">
+                    <div className="container mx-auto px-4 py-8 md:py-12 relative">
                         <button
                             onClick={() => router.back()}
-                            className="flex items-center text-white/90 hover:text-white mb-8 group"
+                            className="flex items-center text-white/90 hover:text-white mb-6 group"
                         >
                             <ArrowLeft className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" />
                             Back to Recipes
                         </button>
 
-                        <div className="flex flex-col lg:flex-row items-start justify-between gap-8">
+                        <div className="flex flex-col lg:flex-row items-start justify-between gap-6">
                             <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <span className={`px-4 py-2 rounded-full text-sm font-semibold ${getDifficultyColor(recipe.difficulty)} border`}>
-                                        <span className="flex items-center gap-2">
-                                            {getDifficultyIcon(recipe.difficulty)}
-                                            {recipe.difficulty.charAt(0).toUpperCase() + recipe.difficulty.slice(1)}
-                                        </span>
+                                <div className="flex flex-wrap items-center gap-3 mb-4">
+                                    <span className={`px-4 py-2 rounded-full text-sm font-semibold ${getDifficultyColor(recipe.difficulty)} border flex items-center gap-2`}>
+                                        {getDifficultyIcon(recipe.difficulty)}
+                                        {recipe.difficulty.charAt(0).toUpperCase() + recipe.difficulty.slice(1)}
                                     </span>
                                     <span className={`px-4 py-2 rounded-full text-sm font-semibold ${getCategoryColor(recipe.category)} border`}>
                                         {recipe.category}
                                     </span>
+                                    <span className="px-4 py-2 rounded-full text-sm font-semibold bg-white/20 text-white border border-white/30 flex items-center gap-2">
+                                        <Calendar className="w-4 h-4" />
+                                        {formatDate(recipe.created_at)}
+                                    </span>
                                 </div>
 
-                                <h1 className="text-5xl font-bold text-white mb-6">{recipe.title}</h1>
+                                <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4 leading-tight">
+                                    {recipe.title}
+                                </h1>
 
-                                <p className="text-white/90 text-lg mb-8 max-w-3xl">{recipe.description}</p>
+                                <p className="text-white/90 text-lg mb-6 max-w-3xl line-clamp-3">
+                                    {recipe.description}
+                                </p>
 
-                                <div className="flex flex-wrap items-center gap-6 text-white/90">
+                                <div className="flex flex-wrap items-center gap-4 md:gap-6 text-white/90">
                                     <div className="flex items-center gap-2">
                                         <Clock className="w-5 h-5" />
                                         <span className="font-semibold">{totalTime} min total</span>
-                                        <span className="text-white/70">({recipe.prep_time} prep, {recipe.cook_time} cook)</span>
+                                        <span className="text-white/70 text-sm">({recipe.prep_time} prep, {recipe.cook_time} cook)</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Users className="w-5 h-5" />
@@ -294,12 +404,11 @@ export default function RecipeDetailPage() {
                                 </div>
                             </div>
 
-                            {/* Action Buttons */}
-                            <div className="flex flex-wrap gap-3">
-                                <button
-                                    onClick={() => setIsFavorite(!isFavorite)}
+                            <div className="flex flex-wrap gap-2 lg:gap-3 mt-4 lg:mt-0">
+                                {/* <button
+                                    onClick={handleFavorite}
                                     className={`p-3 rounded-xl border transition-all ${isFavorite
-                                        ? 'bg-red-500 text-white border-red-500'
+                                        ? 'bg-red-500 text-white border-red-500 hover:bg-red-600'
                                         : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
                                         }`}
                                     title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -317,7 +426,7 @@ export default function RecipeDetailPage() {
                                     title="Share recipe"
                                 >
                                     <Share2 className="w-5 h-5" />
-                                </button>
+                                </button> */}
 
                                 <button
                                     onClick={handlePrint}
@@ -358,7 +467,6 @@ export default function RecipeDetailPage() {
                         </div>
                     </div>
 
-                    {/* Wave Divider */}
                     <div className="absolute bottom-0 left-0 right-0">
                         <svg viewBox="0 0 1200 120" preserveAspectRatio="none" className="w-full h-12">
                             <path d="M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,52.47V0Z"
@@ -371,64 +479,102 @@ export default function RecipeDetailPage() {
                     </div>
                 </div>
 
-                {/* Recipe Content */}
-                <div className="container mx-auto px-4 py-12 -mt-12 relative z-10">
-                    <div className="grid lg:grid-cols-3 gap-8">
-                        {/* Left Column - Recipe Details */}
-                        <div className="lg:col-span-2 space-y-8">
-                            {/* Ingredients Card */}
-                            <div className="bg-white rounded-2xl shadow-lg p-8 border border-gray-100">
-                                <div className="flex items-center justify-between mb-8">
-                                    <h2 className="text-3xl font-bold text-gray-800">Ingredients</h2>
-                                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                                        <Users className="w-4 h-4" />
-                                        <span>For {recipe.servings} servings</span>
-                                    </div>
-                                </div>
+                {recipe.image_url && (
+                    <div className="container mx-auto px-4 -mt-6 relative z-10">
+                        <div className="relative h-64 md:h-96 rounded-2xl overflow-hidden shadow-2xl border-4 border-white">
+                            <Image
+                                src={recipe.image_url}
+                                alt={recipe.title}
+                                fill
+                                className="object-cover"
+                                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1200px"
+                                priority
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
+                        </div>
+                    </div>
+                )}
 
-                                <div className="grid md:grid-cols-2 gap-6">
-                                    {recipe.ingredients.split('\n').map((ingredient, index) => (
-                                        <div key={index} className="flex items-start gap-3 group">
-                                            <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0 group-hover:scale-125 transition-transform"></div>
-                                            <span className="text-gray-700 group-hover:text-gray-900 transition-colors">
-                                                {ingredient.trim()}
-                                            </span>
-                                        </div>
-                                    ))}
+                <div className="container mx-auto px-4 py-8 md:py-12">
+                    <div className="grid lg:grid-cols-3 gap-6 md:gap-8">
+                        <div className="lg:col-span-2 space-y-6 md:space-y-8">
+                            <div className="bg-white rounded-2xl shadow-lg p-2 border border-gray-100">
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setActiveTab('ingredients')}
+                                        className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-all ${activeTab === 'ingredients'
+                                            ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-md'
+                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        Ingredients
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('instructions')}
+                                        className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-all ${activeTab === 'instructions'
+                                            ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-md'
+                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        Instructions
+                                    </button>
                                 </div>
                             </div>
 
-                            {/* Instructions Card */}
-                            <div className="bg-white rounded-2xl shadow-lg p-8 border border-gray-100">
-                                <div className="flex items-center justify-between mb-8">
-                                    <h2 className="text-3xl font-bold text-gray-800">Instructions</h2>
-                                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                                        <Clock className="w-4 h-4" />
-                                        <span>{totalTime} minutes</span>
+                            {activeTab === 'ingredients' && (
+                                <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 border border-gray-100">
+                                    <div className="flex items-center justify-between mb-6 md:mb-8">
+                                        <h2 className="text-2xl md:text-3xl font-bold text-gray-800">Ingredients</h2>
+                                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                                            <Users className="w-4 h-4" />
+                                            <span>For {recipe.servings} servings</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        {recipe.ingredients.split('\n').map((ingredient, index) => (
+                                            <div key={index} className="flex items-start gap-3 group">
+                                                <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0 group-hover:scale-125 transition-transform"></div>
+                                                <span className="text-gray-700 group-hover:text-gray-900 transition-colors">
+                                                    {ingredient.trim()}
+                                                </span>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
+                            )}
 
-                                <div className="space-y-6">
-                                    {recipe.instructions.split('\n').map((step, index) => (
-                                        <div key={index} className="flex gap-6 group">
-                                            <div className="flex-shrink-0">
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-red-500 text-white flex items-center justify-center font-bold text-lg group-hover:scale-110 transition-transform">
-                                                    {index + 1}
+                            {activeTab === 'instructions' && (
+                                <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 border border-gray-100">
+                                    <div className="flex items-center justify-between mb-6 md:mb-8">
+                                        <h2 className="text-2xl md:text-3xl font-bold text-gray-800">Instructions</h2>
+                                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                                            <Clock className="w-4 h-4" />
+                                            <span>{totalTime} minutes</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-6">
+                                        {recipe.instructions.split('\n').map((step, index) => (
+                                            <div key={index} className="flex gap-4 md:gap-6 group">
+                                                <div className="flex-shrink-0">
+                                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-red-500 text-white flex items-center justify-center font-bold text-lg group-hover:scale-110 transition-transform">
+                                                        {index + 1}
+                                                    </div>
+                                                </div>
+                                                <div className="flex-1 pt-2">
+                                                    <p className="text-gray-700 group-hover:text-gray-900 transition-colors">
+                                                        {step.trim()}
+                                                    </p>
                                                 </div>
                                             </div>
-                                            <div className="flex-1">
-                                                <p className="text-gray-700 group-hover:text-gray-900 transition-colors">
-                                                    {step.trim()}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
-                            {/* Notes Card */}
-                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl shadow-lg p-8 border border-blue-100">
-                                <h3 className="text-2xl font-bold text-gray-800 mb-6">Chef's Notes</h3>
+                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl shadow-lg p-6 md:p-8 border border-blue-100">
+                                <h3 className="text-xl md:text-2xl font-bold text-gray-800 mb-6">Chef's Notes</h3>
                                 <div className="space-y-4">
                                     <div className="flex items-start gap-4">
                                         <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
@@ -437,7 +583,7 @@ export default function RecipeDetailPage() {
                                         <div>
                                             <h4 className="font-semibold text-gray-800 mb-1">Pro Tip</h4>
                                             <p className="text-gray-600">
-                                                For best results, use fresh ingredients and follow the instructions carefully.
+                                                For best results, use fresh ingredients and follow the instructions carefully. Adjust seasoning to taste.
                                             </p>
                                         </div>
                                     </div>
@@ -448,7 +594,7 @@ export default function RecipeDetailPage() {
                                         <div>
                                             <h4 className="font-semibold text-gray-800 mb-1">Storage</h4>
                                             <p className="text-gray-600">
-                                                Store leftovers in an airtight container in the refrigerator for up to 3 days.
+                                                Store leftovers in an airtight container in the refrigerator for up to 3 days. Can be frozen for up to 1 month.
                                             </p>
                                         </div>
                                     </div>
@@ -456,32 +602,29 @@ export default function RecipeDetailPage() {
                             </div>
                         </div>
 
-                        {/* Right Column - Sidebar */}
-                        <div className="space-y-8">
-                            {/* Nutrition Info */}
+                        <div className="space-y-6 md:space-y-8">
                             <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
                                 <h3 className="text-xl font-bold text-gray-800 mb-6">Nutrition Info</h3>
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center pb-3 border-b border-gray-100">
                                         <span className="text-gray-600">Calories</span>
-                                        <span className="font-semibold text-gray-800">~450 kcal</span>
+                                        <span className="font-semibold text-gray-800">{nutrition.calories} kcal</span>
                                     </div>
                                     <div className="flex justify-between items-center pb-3 border-b border-gray-100">
                                         <span className="text-gray-600">Protein</span>
-                                        <span className="font-semibold text-gray-800">25g</span>
+                                        <span className="font-semibold text-gray-800">{nutrition.protein}g</span>
                                     </div>
                                     <div className="flex justify-between items-center pb-3 border-b border-gray-100">
                                         <span className="text-gray-600">Carbs</span>
-                                        <span className="font-semibold text-gray-800">55g</span>
+                                        <span className="font-semibold text-gray-800">{nutrition.carbs}g</span>
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <span className="text-gray-600">Fat</span>
-                                        <span className="font-semibold text-gray-800">18g</span>
+                                        <span className="font-semibold text-gray-800">{nutrition.fat}g</span>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Cooking Times */}
                             <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-2xl shadow-lg p-6 border border-orange-100">
                                 <h3 className="text-xl font-bold text-gray-800 mb-6">Cooking Times</h3>
                                 <div className="space-y-4">
@@ -523,14 +666,23 @@ export default function RecipeDetailPage() {
                                 </div>
                             </div>
 
-                            {/* Author Card */}
                             <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
                                 <div className="flex items-center gap-4 mb-6">
                                     <div className="relative">
-                                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
-                                            <ChefHat className="w-8 h-8 text-white" />
+                                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
+                                            {recipe.author_avatar ? (
+                                                <Image
+                                                    src={recipe.author_avatar}
+                                                    alt={recipe.author_name}
+                                                    width={56}
+                                                    height={56}
+                                                    className="rounded-full object-cover"
+                                                />
+                                            ) : (
+                                                <ChefHat className="w-7 h-7 text-white" />
+                                            )}
                                         </div>
-                                        <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white"></div>
+                                        <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white"></div>
                                     </div>
                                     <div>
                                         <h4 className="font-bold text-gray-800">{recipe.author_name}</h4>
@@ -542,10 +694,7 @@ export default function RecipeDetailPage() {
                                     <div className="flex items-center justify-between text-sm">
                                         <span className="text-gray-600">Joined</span>
                                         <span className="font-medium text-gray-800">
-                                            {new Date(recipe.created_at).toLocaleDateString('en-US', {
-                                                month: 'long',
-                                                year: 'numeric'
-                                            })}
+                                            {formatDate(recipe.created_at)}
                                         </span>
                                     </div>
                                     <div className="flex items-center justify-between text-sm">
@@ -561,20 +710,23 @@ export default function RecipeDetailPage() {
                                     </div>
                                 </div>
 
-                                <button className="w-full mt-6 px-4 py-3 border-2 border-orange-500 text-orange-500 rounded-xl hover:bg-orange-50 transition-all font-medium">
+                                <button
+                                    onClick={() => router.push(`/profile/${recipe.user_id}`)}
+                                    className="w-full mt-6 px-4 py-3 border-2 border-orange-500 text-orange-500 rounded-xl hover:bg-orange-50 transition-all font-medium"
+                                >
                                     View Profile
                                 </button>
                             </div>
 
-                            {/* Tags */}
                             <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
                                 <h3 className="text-xl font-bold text-gray-800 mb-6">Tags</h3>
                                 <div className="flex flex-wrap gap-2">
-                                    {['Pasta', 'Italian', 'Dinner', 'Family Meal', 'Comfort Food', 'Easy Cooking'].map((tag) => (
+                                    {[recipe.category, 'Popular', 'Easy', 'Healthy', 'Family', 'Quick'].map((tag) => (
                                         <span
                                             key={tag}
-                                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 transition-colors cursor-pointer"
+                                            className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 transition-colors cursor-pointer flex items-center gap-1"
                                         >
+                                            <Tag className="w-3 h-3" />
                                             {tag}
                                         </span>
                                     ))}
@@ -583,11 +735,10 @@ export default function RecipeDetailPage() {
                         </div>
                     </div>
 
-                    {/* Action Bar */}
                     <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
                         <button
-                            onClick={() => setIsFavorite(!isFavorite)}
-                            className={`p-4 rounded-full shadow-2xl transition-all transform hover:scale-110 ${isFavorite
+                            onClick={handleFavorite}
+                            className={`p-4 rounded-full shadow-2xl transition-all transform hover:scale-110 active:scale-95 ${isFavorite
                                 ? 'bg-red-500 text-white'
                                 : 'bg-white text-gray-800'
                                 }`}
@@ -602,7 +753,7 @@ export default function RecipeDetailPage() {
 
                         <button
                             onClick={handleShare}
-                            className="p-4 rounded-full bg-white text-gray-800 shadow-2xl hover:scale-110 transition-all"
+                            className="p-4 rounded-full bg-white text-gray-800 shadow-2xl hover:scale-110 transition-all active:scale-95"
                             title="Share recipe"
                         >
                             <Share2 className="w-6 h-6" />
@@ -611,7 +762,7 @@ export default function RecipeDetailPage() {
                         {isOwner && (
                             <button
                                 onClick={() => router.push(`/recipes/${recipe.id}/edit`)}
-                                className="p-4 rounded-full bg-orange-500 text-white shadow-2xl hover:scale-110 transition-all"
+                                className="p-4 rounded-full bg-orange-500 text-white shadow-2xl hover:scale-110 transition-all active:scale-95"
                                 title="Edit recipe"
                             >
                                 <Edit2 className="w-6 h-6" />

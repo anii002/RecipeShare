@@ -1,35 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
-import { comparePassword, generateToken } from '@/lib/auth';
+import { connectToDatabase } from '@/lib/db';
+import User from '@/models/User';
+import { generateToken } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
+    await connectToDatabase();
+    
     const { email, password } = await request.json();
 
+    // Validate input
     if (!email || !password) {
       return NextResponse.json(
-        { error: 'All fields are required' },
+        { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
     // Find user
-    const users = await query<any>(
-      'SELECT id, name, email, password, role FROM users WHERE email = ?',
-      [email]
-    );
-
-    if (users.length === 0) {
+    const user = await User.findOne({ email });
+    if (!user) {
       return NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }
       );
     }
 
-    const user = users[0];
-
     // Verify password
-    const isValidPassword = await comparePassword(password, user.password);
+    const isValidPassword = await user.comparePassword(password);
     if (!isValidPassword) {
       return NextResponse.json(
         { error: 'Invalid credentials' },
@@ -39,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     // Generate token
     const token = generateToken({
-      id: user.id,
+      id: user._id.toString(),
       email: user.email,
       name: user.name,
       role: user.role
@@ -49,10 +47,11 @@ export async function POST(request: NextRequest) {
       success: true,
       token,
       user: {
-        id: user.id,
+        id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        avatar_url: user.avatar_url
       }
     });
   } catch (error) {

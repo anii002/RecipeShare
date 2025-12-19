@@ -1,13 +1,13 @@
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 export interface UserPayload {
-  id: number;
+  id: string;
   email: string;
   name: string;
   role: string;
+  avatar_url?: string;
 }
 
 export function generateToken(user: UserPayload): string {
@@ -20,13 +20,4 @@ export function verifyToken(token: string): UserPayload | null {
   } catch (error) {
     return null;
   }
-}
-
-export async function hashPassword(password: string): Promise<string> {
-  const salt = await bcrypt.genSalt(10);
-  return bcrypt.hash(password, salt);
-}
-
-export async function comparePassword(password: string, hashedPassword: string): Promise<boolean> {
-  return bcrypt.compare(password, hashedPassword);
 }

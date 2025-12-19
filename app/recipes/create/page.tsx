@@ -83,7 +83,6 @@ export default function CreateRecipePage() {
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-8">
-                        {/* Basic Info */}
                         <div className="bg-white rounded-xl shadow-sm p-6">
                             <h2 className="text-xl font-semibold mb-6">Basic Information</h2>
                             <div className="space-y-6">
@@ -202,7 +201,6 @@ export default function CreateRecipePage() {
                             </div>
                         </div>
 
-                        {/* Ingredients */}
                         <div className="bg-white rounded-xl shadow-sm p-6">
                             <h2 className="text-xl font-semibold mb-6">Ingredients *</h2>
                             <textarea
@@ -219,7 +217,6 @@ export default function CreateRecipePage() {
                             />
                         </div>
 
-                        {/* Instructions */}
                         <div className="bg-white rounded-xl shadow-sm p-6">
                             <h2 className="text-xl font-semibold mb-6">Instructions *</h2>
                             <textarea

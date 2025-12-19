@@ -1,11 +1,22 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { Clock, Users, ChefHat, Edit2, Trash2 } from 'lucide-react';
+import Image from 'next/image';
+import { 
+  Clock, 
+  Users, 
+  ChefHat, 
+  Star, 
+  Edit2, 
+  Trash2,
+  Share2,
+  Bookmark
+} from 'lucide-react';
 
 interface RecipeCardProps {
   recipe: {
-    id: number;
+    id: string; 
     title: string;
     description: string;
     prep_time: number;
@@ -13,24 +24,31 @@ interface RecipeCardProps {
     servings: number;
     difficulty: string;
     category: string;
+    image_url: string;
     author_name: string;
+    author_avatar: string;
+    created_at: string;
   };
   showActions?: boolean;
-  onDelete?: (id: number) => void;
+  onDelete?: (id: string) => void; 
 }
 
 export default function RecipeCard({ recipe, showActions = false, onDelete }: RecipeCardProps) {
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const totalTime = recipe.prep_time + recipe.cook_time;
-  
+
   const difficultyColor = {
     easy: 'bg-green-100 text-green-800',
     medium: 'bg-yellow-100 text-yellow-800',
     hard: 'bg-red-100 text-red-800'
-  }[recipe.difficulty];
+  }[recipe.difficulty] || 'bg-gray-100 text-gray-800';
 
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this recipe?')) return;
     
+    setIsDeleting(true);
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`/api/recipes/${recipe.id}`, {
@@ -45,92 +63,122 @@ export default function RecipeCard({ recipe, showActions = false, onDelete }: Re
       }
     } catch (error) {
       console.error('Error deleting recipe:', error);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 border border-gray-100 group">
-      {/* Image Placeholder */}
-      <div className="h-56 bg-gradient-to-br from-orange-500 to-red-500 relative overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <ChefHat className="w-20 h-20 text-white/20 group-hover:scale-110 transition-transform duration-500" />
-        </div>
-        <div className="absolute top-4 right-4">
-          <span className={`px-4 py-2 rounded-full text-sm font-semibold ${difficultyColor} shadow-lg`}>
-            {recipe.difficulty.charAt(0).toUpperCase() + recipe.difficulty.slice(1)}
+    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
+      <div className="relative h-48 bg-gray-200">
+        {recipe.image_url ? (
+          <Image
+            src={recipe.image_url}
+            alt={recipe.title}
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-100 to-red-100">
+            <ChefHat className="w-16 h-16 text-orange-300" />
+          </div>
+        )}
+        <div className="absolute top-3 right-3">
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${difficultyColor}`}>
+            {recipe.difficulty?.charAt(0).toUpperCase() + recipe.difficulty?.slice(1)}
           </span>
         </div>
+        <button
+          onClick={() => setIsFavorite(!isFavorite)}
+          className="absolute top-3 left-3 p-2 bg-white rounded-full shadow hover:bg-gray-50"
+        >
+          <Bookmark className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600'}`} />
+        </button>
       </div>
 
       <div className="p-6">
-        <div className="flex justify-between items-start mb-4">
-          <Link href={`/recipes/${recipe.id}`} className="flex-1">
-            <h3 className="text-xl font-bold text-gray-800 group-hover:text-orange-500 transition-colors line-clamp-1">
+        <div className="flex items-start justify-between mb-3">
+          <Link href={`/recipes/${recipe.id}`}>
+            <h3 className="text-xl font-bold text-gray-800 hover:text-orange-500 transition-colors line-clamp-1">
               {recipe.title}
             </h3>
           </Link>
-          
+        </div>
+
+        <p className="text-gray-600 mb-4 line-clamp-2">
+          {recipe.description || 'No description available.'}
+        </p>
+
+        <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center">
+              <Clock className="w-4 h-4 mr-1" />
+              <span>{totalTime} min</span>
+            </div>
+            <div className="flex items-center">
+              <Users className="w-4 h-4 mr-1" />
+              <span>{recipe.servings} servings</span>
+            </div>
+          </div>
+          <span className="px-2 py-1 bg-gray-100 rounded text-xs">
+            {recipe.category}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between border-t pt-4">
+          <div className="flex items-center">
+            <div className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden mr-3">
+              {recipe.author_avatar ? (
+                <Image
+                  src={recipe.author_avatar}
+                  alt={recipe.author_name}
+                  width={32}
+                  height={32}
+                  className="object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-orange-100 flex items-center justify-center">
+                  <span className="text-sm font-semibold text-orange-500">
+                    {recipe.author_name?.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+            </div>
+            <span className="text-sm font-medium text-gray-700">
+              {recipe.author_name}
+            </span>
+          </div>
+
           {showActions && (
-            <div className="flex gap-2 ml-4">
+            <div className="flex items-center space-x-2">
               <Link
                 href={`/recipes/${recipe.id}/edit`}
-                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
                 title="Edit"
               >
                 <Edit2 className="w-4 h-4" />
               </Link>
               <button
                 onClick={handleDelete}
-                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                disabled={isDeleting}
+                className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors disabled:opacity-50"
                 title="Delete"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
+              <button
+                className="p-2 text-gray-600 hover:bg-gray-50 rounded-full transition-colors"
+                title="Share"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/recipes/${recipe.id}`);
+                  alert('Link copied to clipboard!');
+                }}
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
             </div>
           )}
-        </div>
-
-        <p className="text-gray-600 mb-6 line-clamp-2 group-hover:text-gray-700 transition-colors">
-          {recipe.description || 'A delicious recipe waiting to be discovered.'}
-        </p>
-
-        {/* Stats */}
-        <div className="flex items-center justify-between text-sm text-gray-500 mb-6">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center">
-              <Clock className="w-4 h-4 mr-2 text-orange-500" />
-              <span>{totalTime} min</span>
-            </div>
-            <div className="flex items-center">
-              <Users className="w-4 h-4 mr-2 text-orange-500" />
-              <span>{recipe.servings} servings</span>
-            </div>
-          </div>
-          <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
-            {recipe.category}
-          </span>
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-gray-100 pt-4 flex items-center justify-between">
-          <div className="flex items-center">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center mr-3">
-              <span className="text-xs font-bold text-white">
-                {recipe.author_name.charAt(0)}
-              </span>
-            </div>
-            <span className="text-sm text-gray-700">{recipe.author_name}</span>
-          </div>
-          
-          <Link
-            href={`/recipes/${recipe.id}`}
-            className="text-orange-500 hover:text-orange-600 text-sm font-medium flex items-center gap-1"
-          >
-            View Recipe
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-            </svg>
-          </Link>
         </div>
       </div>
     </div>
