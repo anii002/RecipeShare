@@ -5,6 +5,37 @@ import User from '@/models/User';
 import { verifyToken } from '@/lib/auth';
 import mongoose from 'mongoose';
 
+// Type for populated user
+interface PopulatedUser {
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  avatar_url?: string;
+}
+
+// Type for recipe with populated user
+interface PopulatedRecipe {
+  _id: mongoose.Types.ObjectId;
+  title: string;
+  description?: string;
+  ingredients: string[];
+  instructions: string[];
+  prep_time?: number;
+  cook_time?: number;
+  servings?: number;
+  difficulty?: string;
+  category?: string;
+  image_url?: string;
+  user_id: PopulatedUser | mongoose.Types.ObjectId;
+  is_public: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Type guard to check if user is populated
+function isUserPopulated(user: any): user is PopulatedUser {
+  return user && typeof user === 'object' && 'name' in user;
+}
+
 // GET /api/recipes - Get all recipes
 export async function GET(request: NextRequest) {
   try {
@@ -54,21 +85,27 @@ export async function GET(request: NextRequest) {
     const total = await Recipe.countDocuments(query);
 
     // Transform data
-    const transformedRecipes = recipes.map(recipe => ({
-      id: recipe._id.toString(),
-      title: recipe.title,
-      description: recipe.description,
-      prep_time: recipe.prep_time,
-      cook_time: recipe.cook_time,
-      servings: recipe.servings,
-      difficulty: recipe.difficulty,
-      category: recipe.category,
-      image_url: recipe.image_url,
-      author_name: (recipe.user_id as any).name,
-      author_avatar: (recipe.user_id as any).avatar_url,
-      created_at: recipe.createdAt,
-      updated_at: recipe.updatedAt
-    }));
+    const transformedRecipes = (recipes as unknown as PopulatedRecipe[]).map(recipe => {
+      const user = recipe.user_id;
+      const userName = isUserPopulated(user) ? user.name : 'Unknown';
+      const userAvatar = isUserPopulated(user) ? user.avatar_url : '';
+      
+      return {
+        id: recipe._id.toString(),
+        title: recipe.title,
+        description: recipe.description || '',
+        prep_time: recipe.prep_time || 0,
+        cook_time: recipe.cook_time || 0,
+        servings: recipe.servings || 1,
+        difficulty: recipe.difficulty || 'medium',
+        category: recipe.category || 'Uncategorized',
+        image_url: recipe.image_url || '',
+        author_name: userName,
+        author_avatar: userAvatar,
+        created_at: recipe.createdAt,
+        updated_at: recipe.updatedAt
+      };
+    });
 
     return NextResponse.json({
       recipes: transformedRecipes,
@@ -140,22 +177,32 @@ export async function POST(request: NextRequest) {
       model: User
     });
 
+    const recipeObj = recipe.toObject ? recipe.toObject() : recipe;
+    const populatedRecipe = recipeObj as unknown as PopulatedRecipe;
+    
+    const userName = isUserPopulated(populatedRecipe.user_id) 
+      ? populatedRecipe.user_id.name 
+      : 'Unknown';
+    const userAvatar = isUserPopulated(populatedRecipe.user_id)
+      ? populatedRecipe.user_id.avatar_url
+      : '';
+
     const transformedRecipe = {
-      id: recipe._id.toString(),
-      title: recipe.title,
-      description: recipe.description,
-      ingredients: recipe.ingredients,
-      instructions: recipe.instructions,
-      prep_time: recipe.prep_time,
-      cook_time: recipe.cook_time,
-      servings: recipe.servings,
-      difficulty: recipe.difficulty,
-      category: recipe.category,
-      image_url: recipe.image_url,
-      author_name: (recipe.user_id as any).name,
-      author_avatar: (recipe.user_id as any).avatar_url,
-      created_at: recipe.createdAt,
-      updated_at: recipe.updatedAt
+      id: populatedRecipe._id.toString(),
+      title: populatedRecipe.title,
+      description: populatedRecipe.description || '',
+      ingredients: populatedRecipe.ingredients,
+      instructions: populatedRecipe.instructions,
+      prep_time: populatedRecipe.prep_time || 0,
+      cook_time: populatedRecipe.cook_time || 0,
+      servings: populatedRecipe.servings || 1,
+      difficulty: populatedRecipe.difficulty || 'medium',
+      category: populatedRecipe.category || 'Uncategorized',
+      image_url: populatedRecipe.image_url || '',
+      author_name: userName,
+      author_avatar: userAvatar,
+      created_at: populatedRecipe.createdAt,
+      updated_at: populatedRecipe.updatedAt
     };
 
     return NextResponse.json(

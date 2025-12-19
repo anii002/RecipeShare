@@ -267,7 +267,7 @@ export default function RecipesPage() {
                   </button>
 
                   {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
-                    let pageNum;
+                    let pageNum: number;
                     if (pagination.pages <= 5) {
                       pageNum = i + 1;
                     } else if (pagination.page <= 3) {
@@ -282,10 +282,11 @@ export default function RecipesPage() {
                       <button
                         key={pageNum}
                         onClick={() => handlePageChange(pageNum)}
-                        className={`px-4 py-2 rounded-lg ${pagination.page === pageNum
+                        className={`px-4 py-2 rounded-lg ${
+                          pagination.page === pageNum
                             ? 'bg-orange-500 text-white'
                             : 'border hover:bg-gray-50'
-                          }`}
+                        }`}
                       >
                         {pageNum}
                       </button>
