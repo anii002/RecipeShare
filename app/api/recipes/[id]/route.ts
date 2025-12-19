@@ -16,10 +16,10 @@ export async function GET(
 ) {
   try {
     await connectToDatabase();
-    
+
     // Await params properly for Next.js 16
     const { id } = await params;
-    
+
     // Validate the ID format
     if (!isValidObjectId(id)) {
       return NextResponse.json(
@@ -27,9 +27,9 @@ export async function GET(
         { status: 400 }
       );
     }
-    
+
     console.log('Fetching recipe with ID:', id);
-    
+
     // Find recipe by ID and populate user info
     const recipe = await Recipe.findById(id)
       .populate({
@@ -49,8 +49,8 @@ export async function GET(
 
     // Check if recipe is public or user owns it
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    let isAuthorized = recipe.is_public;
-    
+    let isAuthorized = (recipe as any).is_public;
+
     if (token) {
       const user = verifyToken(token);
       if (user && (user.id === recipe.user_id._id.toString() || user.role === 'admin')) {
@@ -66,7 +66,7 @@ export async function GET(
     }
 
     console.log('Recipe found:', recipe.title);
-    
+
     // Transform recipe data for frontend
     const transformedRecipe = {
       id: recipe._id.toString(),
@@ -89,15 +89,15 @@ export async function GET(
       is_public: recipe.is_public
     };
 
-    return NextResponse.json({ 
-      recipe: transformedRecipe 
+    return NextResponse.json({
+      recipe: transformedRecipe
     });
 
   } catch (error: any) {
     console.error('Error fetching recipe:', error.message);
-    
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to fetch recipe',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       },
@@ -113,7 +113,7 @@ export async function PUT(
 ) {
   try {
     await connectToDatabase();
-    
+
     // Verify authentication
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
     if (!token) {
@@ -132,7 +132,7 @@ export async function PUT(
     }
 
     const { id } = await params;
-    
+
     // Validate ID
     if (!isValidObjectId(id)) {
       return NextResponse.json(
@@ -142,7 +142,7 @@ export async function PUT(
     }
 
     const recipeData = await request.json();
-    
+
     // Find the recipe
     const recipe = await Recipe.findById(id);
     if (!recipe) {
@@ -210,7 +210,7 @@ export async function PUT(
 
   } catch (error: any) {
     console.error('Error updating recipe:', error);
-    
+
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map((err: any) => err.message);
       return NextResponse.json(
@@ -218,7 +218,7 @@ export async function PUT(
         { status: 400 }
       );
     }
-    
+
     return NextResponse.json(
       { error: 'Failed to update recipe' },
       { status: 500 }
@@ -233,7 +233,7 @@ export async function DELETE(
 ) {
   try {
     await connectToDatabase();
-    
+
     // Verify authentication
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
     if (!token) {
@@ -252,7 +252,7 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    
+
     // Validate ID
     if (!isValidObjectId(id)) {
       return NextResponse.json(
