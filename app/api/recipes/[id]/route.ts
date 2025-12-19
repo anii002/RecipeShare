@@ -3,13 +3,44 @@ import { connectToDatabase } from '@/lib/db';
 import Recipe from '@/models/Recipe';
 import User from '@/models/User';
 import { verifyToken } from '@/lib/auth';
+import mongoose from 'mongoose';
 
-// Helper to clean and validate MongoDB ObjectId
 function isValidObjectId(id: string): boolean {
   return /^[0-9a-fA-F]{24}$/.test(id);
 }
 
-// GET /api/recipes/[id] - Get single recipe by ID
+interface PopulatedRecipe {
+  _id: mongoose.Types.ObjectId;
+  title: string;
+  description?: string;
+  ingredients: string[];
+  instructions: string[];
+  prep_time?: number;
+  cook_time?: number;
+  servings?: number;
+  difficulty?: string;
+  category?: string;
+  image_url?: string;
+  user_id: {
+    _id: mongoose.Types.ObjectId;
+    name?: string;
+    email?: string;
+    avatar_url?: string;
+  } | mongoose.Types.ObjectId;
+  is_public?: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function isUserPopulated(user_id: any): user_id is { 
+  _id: mongoose.Types.ObjectId; 
+  name?: string; 
+  email?: string; 
+  avatar_url?: string; 
+} {
+  return user_id && typeof user_id === 'object' && '_id' in user_id;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,10 +48,8 @@ export async function GET(
   try {
     await connectToDatabase();
 
-    // Await params properly for Next.js 16
     const { id } = await params;
 
-    // Validate the ID format
     if (!isValidObjectId(id)) {
       return NextResponse.json(
         { error: 'Invalid recipe ID format' },
@@ -30,7 +59,6 @@ export async function GET(
 
     console.log('Fetching recipe with ID:', id);
 
-    // Find recipe by ID and populate user info
     const recipe = await Recipe.findById(id)
       .populate({
         path: 'user_id',
@@ -47,14 +75,21 @@ export async function GET(
       );
     }
 
-    // Check if recipe is public or user owns it
+    const recipeData = recipe as unknown as PopulatedRecipe;
+    
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    let isAuthorized = (recipe as any).is_public;
+    let isAuthorized = recipeData.is_public || false;
 
     if (token) {
       const user = verifyToken(token);
-      if (user && (user.id === recipe.user_id._id.toString() || user.role === 'admin')) {
-        isAuthorized = true;
+      if (user) {
+        const recipeUserId = isUserPopulated(recipeData.user_id) 
+          ? recipeData.user_id._id.toString() 
+          : recipeData.user_id.toString();
+        
+        if (user.id === recipeUserId || user.role === 'admin') {
+          isAuthorized = true;
+        }
       }
     }
 
@@ -65,28 +100,29 @@ export async function GET(
       );
     }
 
-    console.log('Recipe found:', recipe.title);
+    console.log('Recipe found:', recipeData.title);
 
-    // Transform recipe data for frontend
     const transformedRecipe = {
-      id: recipe._id.toString(),
-      title: recipe.title,
-      description: recipe.description || '',
-      ingredients: recipe.ingredients,
-      instructions: recipe.instructions,
-      prep_time: recipe.prep_time || 0,
-      cook_time: recipe.cook_time || 0,
-      servings: recipe.servings || 1,
-      difficulty: recipe.difficulty || 'medium',
-      category: recipe.category || 'Uncategorized',
-      image_url: recipe.image_url || '',
-      author_name: recipe.user_id?.name || 'Unknown Author',
-      author_avatar: recipe.user_id?.avatar_url || '',
-      author_email: recipe.user_id?.email || '',
-      created_at: recipe.createdAt,
-      updated_at: recipe.updatedAt,
-      user_id: recipe.user_id?._id?.toString() || '',
-      is_public: recipe.is_public
+      id: recipeData._id.toString(),
+      title: recipeData.title,
+      description: recipeData.description || '',
+      ingredients: recipeData.ingredients,
+      instructions: recipeData.instructions,
+      prep_time: recipeData.prep_time || 0,
+      cook_time: recipeData.cook_time || 0,
+      servings: recipeData.servings || 1,
+      difficulty: recipeData.difficulty || 'medium',
+      category: recipeData.category || 'Uncategorized',
+      image_url: recipeData.image_url || '',
+      author_name: isUserPopulated(recipeData.user_id) ? recipeData.user_id.name || 'Unknown Author' : 'Unknown Author',
+      author_avatar: isUserPopulated(recipeData.user_id) ? recipeData.user_id.avatar_url || '' : '',
+      author_email: isUserPopulated(recipeData.user_id) ? recipeData.user_id.email || '' : '',
+      created_at: recipeData.createdAt,
+      updated_at: recipeData.updatedAt,
+      user_id: isUserPopulated(recipeData.user_id) 
+        ? recipeData.user_id._id.toString() 
+        : recipeData.user_id.toString(),
+      is_public: recipeData.is_public || true
     };
 
     return NextResponse.json({
@@ -106,7 +142,6 @@ export async function GET(
   }
 }
 
-// PUT /api/recipes/[id] - Update existing recipe
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -114,7 +149,6 @@ export async function PUT(
   try {
     await connectToDatabase();
 
-    // Verify authentication
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
     if (!token) {
       return NextResponse.json(
@@ -133,7 +167,6 @@ export async function PUT(
 
     const { id } = await params;
 
-    // Validate ID
     if (!isValidObjectId(id)) {
       return NextResponse.json(
         { error: 'Invalid recipe ID' },
@@ -141,9 +174,8 @@ export async function PUT(
       );
     }
 
-    const recipeData = await request.json();
+    const requestData = await request.json();
 
-    // Find the recipe
     const recipe = await Recipe.findById(id);
     if (!recipe) {
       return NextResponse.json(
@@ -152,7 +184,6 @@ export async function PUT(
       );
     }
 
-    // Verify ownership (user_id matches or admin)
     if (recipe.user_id.toString() !== user.id && user.role !== 'admin') {
       return NextResponse.json(
         { error: 'Not authorized to update this recipe' },
@@ -160,7 +191,6 @@ export async function PUT(
       );
     }
 
-    // Update only allowed fields
     const allowedUpdates = [
       'title', 'description', 'ingredients', 'instructions',
       'prep_time', 'cook_time', 'servings', 'difficulty',
@@ -168,38 +198,39 @@ export async function PUT(
     ];
 
     allowedUpdates.forEach(field => {
-      if (recipeData[field] !== undefined) {
-        recipe[field] = recipeData[field];
+      if (requestData[field] !== undefined) {
+        (recipe as any)[field] = requestData[field];
       }
     });
 
     recipe.updatedAt = new Date();
     await recipe.save();
 
-    // Populate user info for response
     await recipe.populate({
       path: 'user_id',
       select: 'name avatar_url',
       model: User
     });
 
+    const populatedRecipe = recipe as any;
+
     const transformedRecipe = {
-      id: recipe._id.toString(),
-      title: recipe.title,
-      description: recipe.description,
-      ingredients: recipe.ingredients,
-      instructions: recipe.instructions,
-      prep_time: recipe.prep_time,
-      cook_time: recipe.cook_time,
-      servings: recipe.servings,
-      difficulty: recipe.difficulty,
-      category: recipe.category,
-      image_url: recipe.image_url || '',
-      author_name: recipe.user_id?.name || 'Unknown',
-      author_avatar: recipe.user_id?.avatar_url || '',
-      created_at: recipe.createdAt,
-      updated_at: recipe.updatedAt,
-      is_public: recipe.is_public
+      id: populatedRecipe._id.toString(),
+      title: populatedRecipe.title,
+      description: populatedRecipe.description,
+      ingredients: populatedRecipe.ingredients,
+      instructions: populatedRecipe.instructions,
+      prep_time: populatedRecipe.prep_time,
+      cook_time: populatedRecipe.cook_time,
+      servings: populatedRecipe.servings,
+      difficulty: populatedRecipe.difficulty,
+      category: populatedRecipe.category,
+      image_url: populatedRecipe.image_url || '',
+      author_name: populatedRecipe.user_id?.name || 'Unknown',
+      author_avatar: populatedRecipe.user_id?.avatar_url || '',
+      created_at: populatedRecipe.createdAt,
+      updated_at: populatedRecipe.updatedAt,
+      is_public: populatedRecipe.is_public
     };
 
     return NextResponse.json({
@@ -226,7 +257,6 @@ export async function PUT(
   }
 }
 
-// DELETE /api/recipes/[id] - Remove recipe
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -234,7 +264,6 @@ export async function DELETE(
   try {
     await connectToDatabase();
 
-    // Verify authentication
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
     if (!token) {
       return NextResponse.json(
@@ -270,7 +299,6 @@ export async function DELETE(
       );
     }
 
-    // Check permissions
     if (recipe.user_id.toString() !== user.id && user.role !== 'admin') {
       return NextResponse.json(
         { error: 'Not authorized to delete this recipe' },
@@ -278,7 +306,6 @@ export async function DELETE(
       );
     }
 
-    // Perform deletion
     await Recipe.deleteOne({ _id: id });
 
     return NextResponse.json({
